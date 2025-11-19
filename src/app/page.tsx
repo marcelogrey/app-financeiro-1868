@@ -36,23 +36,32 @@ export default function EazzyApp() {
     const checkAuth = async () => {
       // Se Supabase não está configurado, redireciona para auth
       if (!isSupabaseAvailable() || !supabase) {
-        router.push('/auth');
         setLoading(false);
+        router.push('/auth');
         return;
       }
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
+        if (error) {
+          console.error('Error getting session:', error);
+          setLoading(false);
+          router.push('/auth');
+          return;
+        }
+
         if (!session) {
+          setLoading(false);
           router.push('/auth');
           return;
         }
 
         setUser(session.user);
-        loadTransactions(session.user.id);
+        await loadTransactions(session.user.id);
       } catch (error) {
         console.error('Error checking auth:', error);
+        setLoading(false);
         router.push('/auth');
       } finally {
         setLoading(false);
@@ -63,12 +72,12 @@ export default function EazzyApp() {
 
     // Listen for auth changes apenas se Supabase está disponível
     if (isSupabaseAvailable() && supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (!session) {
           router.push('/auth');
         } else {
           setUser(session.user);
-          loadTransactions(session.user.id);
+          await loadTransactions(session.user.id);
         }
       });
 
@@ -117,7 +126,11 @@ export default function EazzyApp() {
   // Handle logout
   const handleLogout = async () => {
     if (isSupabaseAvailable() && supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error('Error signing out:', error);
+      }
     }
     router.push('/auth');
   };
